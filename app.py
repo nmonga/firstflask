@@ -1,36 +1,60 @@
-from flask import Flask, render_template, request, redirect
-from bokeh.plotting import figure, output_file, show
+import json
 
+from flask import Flask
+from jinja2 import Template
+
+from bokeh.embed import json_item
+from bokeh.plotting import figure
+from bokeh.resources import CDN
+from bokeh.sampledata.iris import flowers
 
 app = Flask(__name__)
 
-@app.route('/')
-def index():
-  return render_template('index.html')
+page = Template("""
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  {{ resources }}
+</head>
+<body>
+  <div id="myplot"></div>
+  <div id="myplot2"></div>
+  <script>
+  fetch('/plot')
+    .then(function(response) { return response.json(); })
+    .then(function(item) { return Bokeh.embed.embed_item(item); })
+  </script>
+  <script>
+  fetch('/plot2')
+    .then(function(response) { return response.json(); })
+    .then(function(item) { return Bokeh.embed.embed_item(item, "myplot2"); })
+  </script>
+</body>
+""")
 
-@app.route('/about')
-def about():
-  return render_template('about.html')
+colormap = {'setosa': 'red', 'versicolor': 'green', 'virginica': 'blue'}
+colors = [colormap[x] for x in flowers['species']]
+
+def make_plot(x, y):
+    p = figure(title = "Iris Morphology", sizing_mode="fixed", plot_width=400, plot_height=400)
+    p.xaxis.axis_label = x
+    p.yaxis.axis_label = y
+    p.circle(flowers[x], flowers[y], color=colors, fill_alpha=0.2, size=10)
+    return p
 
 @app.route('/')
+def root():
+    return page.render(resources=CDN.render())
+
+@app.route('/plot')
 def plot():
-  return render_template('lines.html')
+    p = make_plot('petal_width', 'petal_length')
+    return json.dumps(json_item(p, "myplot"))
+
+@app.route('/plot2')
+def plot2():
+    p = make_plot('sepal_width', 'sepal_length')
+    return json.dumps(json_item(p))
 
 if __name__ == '__main__':
-  app.run(port=33507)
-
-# prepare some data
-x = [1, 2, 3, 4, 5]
-y = [6, 7, 2, 4, 5]
-
-# output to static HTML file
-output_file("lines.html")
-
-# create a new plot with a title and axis labels
-p = figure(title="simple line example", x_axis_label='x', y_axis_label='y')
-
-# add a line renderer with legend and line thickness
-p.line(x, y, legend_label="Temp.", line_width=2)
-
-# show the results
-show(p)
+    app.run()
